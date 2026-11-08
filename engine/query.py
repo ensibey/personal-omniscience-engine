@@ -1,7 +1,9 @@
 """
 engine/query.py
-RAG sorgu motoru. Retrieval + Ollama ile cevap üretimi.
+LlamaIndex CondensePlusContextChatEngine wrapper backed by Qdrant and local Ollama.
 """
+
+from __future__ import annotations
 
 import logging
 from typing import Optional
@@ -22,29 +24,20 @@ def get_chat_engine(
     use_style: bool = True,
     memory: Optional[ChatMemoryBuffer] = None,
 ) -> CondensePlusContextChatEngine:
-    """
-    Verilen indeks üzerinde bir sohbet motoru oluşturur.
-
-    Args:
-        index: Qdrant'tan yüklenen vektör indeksi.
-        use_style: Yazım tarzı taklidi aktif mi?
-        memory: Dışarıdan gelen hafıza (None → diskten yükle).
-    """
+    """Create a conversational retrieval engine over the Qdrant VectorStoreIndex."""
     if memory is None:
         memory = load_history()
 
     retriever = index.as_retriever(similarity_top_k=TOP_K)
-
     system_prompt = build_system_prompt(use_style=use_style)
-    logger.info(f"🧠 Sistem prompt'u hazırlandı (stil={'açık' if use_style else 'kapalı'}).")
+    logger.info("initialized chat engine (style=%s)", use_style)
 
-    chat_engine = CondensePlusContextChatEngine.from_defaults(
+    return CondensePlusContextChatEngine.from_defaults(
         retriever=retriever,
         memory=memory,
         system_prompt=system_prompt,
         verbose=False,
     )
-    return chat_engine
 
 
 def query(
@@ -53,22 +46,9 @@ def query(
     use_style: bool = True,
     persist: bool = True,
 ) -> str:
-    """
-    Tek seferlik soru-cevap (CLI modu için).
-
-    Args:
-        index: Qdrant vektör indeksi.
-        question: Kullanıcının sorusu.
-        use_style: Yazım tarzı taklidi aktif mi?
-        persist: Sohbet geçmişini diske yaz.
-
-    Returns:
-        Modelin metin cevabı.
-    """
+    """Execute a single-turn query and optionally persist chat history."""
     memory = load_history()
     chat_engine = get_chat_engine(index, use_style=use_style, memory=memory)
-
-    logger.info(f"❓ Soru: {question}")
     response = chat_engine.chat(question)
 
     if persist:

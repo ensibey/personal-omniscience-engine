@@ -1,35 +1,30 @@
 """
 style/analyzer.py
-Kullanıcının kendi yazdığı notları analiz eder ve StyleProfile oluşturur.
-Analiz edilen özellikler:
-  - Ortalama cümle uzunluğu (kelime)
-  - Emoji yoğunluğu
-  - Madde listesi kullanımı
-  - Başlık kullanımı (Markdown #)
-  - Sık kullanılan bağlaçlar / güçlü kelimeler
-  - Ortalama paragraf uzunluğu
+Extracts quantitative writing style metrics (sentence length, paragraph density,
+markdown structure, and lexical frequency) from a local notes corpus.
 """
 
-import re
+from __future__ import annotations
+
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
-from config import DATA_DIR, SUPPORTED_EXTENSIONS
+from config import DATA_DIR
 
 logger = logging.getLogger(__name__)
 
-# Basit emoji tespiti (Unicode emoji aralıkları)
 EMOJI_PATTERN = re.compile(
     "["
-    "\U0001F600-\U0001F64F"  # yüz ifadeleri
-    "\U0001F300-\U0001F5FF"  # semboller & objeler
-    "\U0001F680-\U0001F6FF"  # ulaşım & harita
-    "\U0001F1E0-\U0001F1FF"  # bayraklar
-    "\U00002700-\U000027BF"  # Dingbat
-    "\U0001FA60-\U0001FA6F"  # oyun parçaları
-    "\U00002600-\U000026FF"  # çeşitli semboller
+    "\U0001F600-\U0001F64F"
+    "\U0001F300-\U0001F5FF"
+    "\U0001F680-\U0001F6FF"
+    "\U0001F1E0-\U0001F1FF"
+    "\U00002700-\U000027BF"
+    "\U0001FA60-\U0001FA6F"
+    "\U00002600-\U000026FF"
     "]+",
     flags=re.UNICODE,
 )
@@ -37,19 +32,19 @@ EMOJI_PATTERN = re.compile(
 
 @dataclass
 class StyleProfile:
-    """Kullanıcı yazım stilini özetleyen veri yapısı."""
+    """Aggregated structural and lexical statistics of the user's corpus."""
 
-    avg_sentence_length: float = 12.0    # kelime cinsinden
-    avg_paragraph_length: float = 3.0    # cümle cinsinden
-    emoji_density: float = 0.0           # emoji / toplam kelime oranı
-    bullet_ratio: float = 0.0            # madde satırı / toplam satır
-    heading_ratio: float = 0.0           # başlık satırı / toplam satır
-    uses_bold: bool = False              # **bold** kullanımı
-    uses_code_blocks: bool = False       # ```code``` kullanımı
-    top_words: List[str] = field(default_factory=list)  # sık geçen anlamlı kelimeler
-    sample_sentences: List[str] = field(default_factory=list)  # örnek cümleler (5 adet)
+    avg_sentence_length: float = 12.0
+    avg_paragraph_length: float = 3.0
+    emoji_density: float = 0.0
+    bullet_ratio: float = 0.0
+    heading_ratio: float = 0.0
+    uses_bold: bool = False
+    uses_code_blocks: bool = False
+    top_words: List[str] = field(default_factory=list)
+    sample_sentences: List[str] = field(default_factory=list)
     total_words: int = 0
-    language_hint: str = "tr"           # "tr" veya "en"
+    language_hint: str = "tr"
 
     def __str__(self) -> str:
         return (
@@ -61,7 +56,6 @@ class StyleProfile:
         )
 
 
-# Türkçe & İngilizce stop words (kısa liste)
 _STOP_WORDS = {
     "bir", "bu", "da", "de", "den", "için", "ile", "ve", "ya", "ya da",
     "ama", "fakat", "ki", "mi", "mu", "mü", "mı", "ne", "o", "şu", "çok",
@@ -77,49 +71,39 @@ _STOP_WORDS = {
 
 
 def _read_text_files(directory: Path) -> List[str]:
-    """Desteklenen metin dosyalarını okur, binary içerikleri atlar."""
-    texts = []
-    text_exts = {".md", ".txt"}
-    for ext in text_exts:
+    texts: List[str] = []
+    for ext in (".md", ".txt"):
         for p in directory.rglob(f"*{ext}"):
             try:
                 texts.append(p.read_text(encoding="utf-8", errors="ignore"))
-            except Exception as e:
-                logger.debug(f"Dosya atlandı: {p.name} ({e})")
+            except Exception as exc:
+                logger.debug("skipped %s (%s)", p.name, exc)
     return texts
 
 
 def _split_sentences(text: str) -> List[str]:
-    """Kaba cümle ayırıcı (nokta/ünlem/soru işareti üzerinden)."""
     parts = re.split(r"(?<=[.!?])\s+", text.strip())
     return [p.strip() for p in parts if len(p.strip()) > 10]
 
 
 def _count_words(text: str) -> List[str]:
-    """Metni kelimelere böler."""
     return re.findall(r"\b\w{2,}\b", text.lower())
 
 
 def _detect_language(words: List[str]) -> str:
-    """Basit dil tespiti: Türkçe karakterlere bakılır."""
     tr_chars = set("şğüöçıŞĞÜÖÇİ")
     sample = " ".join(words[:500])
-    if any(c in sample for c in tr_chars):
-        return "tr"
-    return "en"
+    return "tr" if any(c in sample for c in tr_chars) else "en"
 
 
 def analyze_style(directory: Path = DATA_DIR) -> StyleProfile:
-    """
-    Veri klasöründeki metin dosyalarını analiz eder ve StyleProfile döndürür.
-    Dosya yoksa veya yetersizse varsayılan profil döner.
-    """
+    """Scan markdown and plain-text files in directory to compute a StyleProfile."""
     profile = StyleProfile()
     directory = Path(directory)
 
     texts = _read_text_files(directory)
     if not texts:
-        logger.warning("Stil analizi için metin dosyası bulunamadı. Varsayılan profil kullanılıyor.")
+        logger.warning("no text files found in %s; returning default StyleProfile", directory)
         return profile
 
     full_text = "\n\n".join(texts)
@@ -132,20 +116,15 @@ def analyze_style(directory: Path = DATA_DIR) -> StyleProfile:
     profile.total_words = len(words)
     profile.language_hint = _detect_language(words)
 
-    # ── Cümle uzunluğu ─────────────────────────────────────────────────────────
     sentences = _split_sentences(full_text)
     if sentences:
         sentence_word_counts = [len(_count_words(s)) for s in sentences]
         profile.avg_sentence_length = round(
             sum(sentence_word_counts) / len(sentence_word_counts), 1
         )
-        # 5 örnek cümle sakla (kısa olanlar daha temsil edici)
-        sorted_sents = sorted(sentences, key=lambda s: len(s))
-        profile.sample_sentences = [
-            s for s in sorted_sents if 5 < len(s) < 200
-        ][:5]
+        sorted_sents = sorted(sentences, key=len)
+        profile.sample_sentences = [s for s in sorted_sents if 5 < len(s) < 200][:5]
 
-    # ── Paragraf uzunluğu ──────────────────────────────────────────────────────
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", full_text) if p.strip()]
     if paragraphs:
         para_sent_counts = [len(_split_sentences(p)) for p in paragraphs]
@@ -153,23 +132,18 @@ def analyze_style(directory: Path = DATA_DIR) -> StyleProfile:
             sum(para_sent_counts) / len(para_sent_counts), 1
         )
 
-    # ── Emoji yoğunluğu ────────────────────────────────────────────────────────
     emoji_count = sum(len(EMOJI_PATTERN.findall(line)) for line in lines)
     profile.emoji_density = round(emoji_count / max(len(words), 1), 4)
 
-    # ── Madde listesi oranı ────────────────────────────────────────────────────
     bullet_lines = [l for l in lines if re.match(r"^\s*[-*+]\s+|^\s*\d+\.\s+", l)]
     profile.bullet_ratio = round(len(bullet_lines) / max(len(lines), 1), 3)
 
-    # ── Başlık oranı ───────────────────────────────────────────────────────────
     heading_lines = [l for l in lines if re.match(r"^#{1,6}\s+", l)]
     profile.heading_ratio = round(len(heading_lines) / max(len(lines), 1), 3)
 
-    # ── Bold & kod bloğu kullanımı ─────────────────────────────────────────────
     profile.uses_bold = bool(re.search(r"\*\*.+?\*\*", full_text))
     profile.uses_code_blocks = "```" in full_text
 
-    # ── Sık kullanılan anlamlı kelimeler ──────────────────────────────────────
     word_freq: Dict[str, int] = {}
     for w in words:
         if w not in _STOP_WORDS and len(w) > 3:
@@ -178,5 +152,5 @@ def analyze_style(directory: Path = DATA_DIR) -> StyleProfile:
         w for w, _ in sorted(word_freq.items(), key=lambda x: -x[1])
     ][:20]
 
-    logger.info(f"✅ Stil analizi tamamlandı: {profile}")
+    logger.info("style analysis completed: %s", profile)
     return profile

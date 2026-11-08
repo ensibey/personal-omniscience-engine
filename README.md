@@ -1,159 +1,95 @@
-<div align="center">
+# personal-omniscience-engine
 
-# 🧠 Personal Omniscience Engine
+[![CI](https://github.com/ensibey/personal-omniscience-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/ensibey/personal-omniscience-engine/actions)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-### *Senin verin, senin dilin.*
-**İnternet gerektirmeyen, kişiselleştirilmiş bilgi asistanı.**
-
-[![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://python.org)
-[![LlamaIndex](https://img.shields.io/badge/LlamaIndex-0.10+-purple?logo=data:image/svg+xml;base64,)](https://llamaindex.ai)
-[![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-red)](https://qdrant.tech)
-[![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-black)](https://ollama.ai)
-[![Streamlit](https://img.shields.io/badge/Streamlit-UI-FF4B4B?logo=streamlit)](https://streamlit.io)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-</div>
+Local knowledge base indexer and conversational retrieval engine built on **LlamaIndex**, **Qdrant**, and **Ollama** (`llama3.2`, `nomic-embed-text`). Indexes personal Markdown notes, PDFs, DOCX, and TXT files continuously via a filesystem watcher (`watchdog`) and adapts LLM output formatting to match the author's own writing profile.
 
 ---
 
-## ✨ Ne Yapar?
+## Architecture
 
-**Personal Omniscience Engine**, kendi notlarını, PDF'lerini ve dökümanlarını kullanarak sana cevap veren **tamamen yerel** bir yapay zeka asistanıdır.
+```text
+data/ (.md, .pdf, .docx, .txt)
+  │
+  ├──► ingestion/watcher.py  (Watchdog filesystem events -> incremental re-index)
+  ├──► ingestion/indexer.py  (SentenceSplitter 512/64 -> nomic-embed-text -> Qdrant)
+  └──► style/analyzer.py     (Extracts sentence length, bullet/heading ratios, vocabulary)
+                                     │
+                                     ▼
+                         style/prompt_builder.py
+                                     │
+                                     ▼
+User Query ──► CondensePlusContextChatEngine (LlamaIndex + Qdrant Top-K + Ollama)
+```
 
-- 🔒 **Privacy-First**: Verilerin internet'e çıkmaz. Her şey kendi bilgisayarında çalışır.
-- 🎨 **Style Mimicry**: Kendi notlarındaki yazım tarzını öğrenir; çıktıları da senin gibi yazar.
-- 📁 **Multi-Source**: PDF, Markdown, Word, TXT — tek merkezde birleşir.
-- 👁️ **Auto-Index**: Klasörü izler, yeni dosya gelince otomatik vektörleştirir.
-- 💬 **Memory**: Konuşma geçmişini hatırlar.
+### Author Style Profiling (`style/analyzer.py`)
+Generic RAG system prompts produce stiff, uniform responses that feel disconnected from personal engineering notes. `analyze_style()` scans the raw `.md` and `.txt` files in `data/` to compute:
+- Mean sentence length (words/sentence) and paragraph length (sentences/paragraph)
+- Structural ratios: bullet list density (`bullet_ratio`), Markdown heading density (`heading_ratio`), bold emphasis, and fenced code blocks
+- Language detection (`tr` / `en`) and top content vocabulary (`top_words`)
+
+`build_system_prompt()` translates this `StyleProfile` into explicit formatting constraints injected into `CondensePlusContextChatEngine`.
 
 ---
 
-## 🏗️ Mimari
+## Setup & Usage
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  KULLANICI (UI / CLI)                                   │
-│  ┌─────────────┐   ┌──────────────────────────────┐    │
-│  │Streamlit UI │   │  python main.py chat          │    │
-│  └──────┬──────┘   └──────────────┬───────────────┘    │
-└─────────┼────────────────────────┼───────────────────  │
-          │  SORU                  │  SORU               │
-          ▼                        ▼                      │
-┌─────────────────────────────────────────────────────┐   │
-│  ENGINE (LlamaIndex)                                │   │
-│   ┌──────────────┐    ┌──────────────────────────┐  │   │
-│   │ query.py     │    │ memory.py                │  │   │
-│   │ ChatEngine   │◄───│ ChatMemoryBuffer          │  │   │
-│   └──────┬───────┘    └──────────────────────────┘  │   │
-└──────────┼──────────────────────────────────────────┘   │
-           │  retrieve                                     │
-           ▼                                               │
-┌─────────────────────────────────────────────────────┐   │
-│  QDRANT (Vector DB)  ←── ingestion/indexer.py       │   │
-│   nomic-embed-text embeddings, cosine similarity    │   │
-└─────────────────────────────────────────────────────┘   │
-           │  generate                                     │
-           ▼                                               │
-┌─────────────────────────────────────────────────────┐   │
-│  OLLAMA (Local LLM)  llama3.2 / mistral             │   │
-└─────────────────────────────────────────────────────┘   │
-```
+### 1. Prerequisites
+- Python 3.10+
+- [Ollama](https://ollama.com) with `llama3.2` and `nomic-embed-text`:
+  ```bash
+  ollama pull llama3.2
+  ollama pull nomic-embed-text
+  ```
+- [Qdrant](https://qdrant.tech) (via Docker Compose):
+  ```bash
+  docker-compose up -d
+  ```
 
----
-
-## 🚀 Hızlı Başlangıç
-
-### 1. Ön Koşullar
-
-| Araç | Kurulum |
-|---|---|
-| Python 3.11+ | [python.org](https://python.org) |
-| Docker Desktop | [docker.com](https://docker.com/products/docker-desktop) |
-| Ollama | [ollama.ai](https://ollama.ai) |
-
-### 2. Modelleri İndir
-
-```bash
-# Metin üretimi için
-ollama pull llama3.2
-
-# Embedding için
-ollama pull nomic-embed-text
-```
-
-### 3. Projeyi Kur (Windows)
+### 2. Installation
 
 ```bash
 git clone https://github.com/ensibey/personal-omniscience-engine.git
 cd personal-omniscience-engine
-
-# Tek tıkla kurulum:
-setup.bat
-```
-
-Manuel kurulum:
-```bash
-python -m venv venv
-venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env
+cp .env.example .env
 ```
 
-### 4. Qdrant'ı Başlat
+### 3. CLI Commands
+
+Place your `.md`, `.pdf`, `.txt`, or `.docx` files inside `data/` and run:
 
 ```bash
-docker-compose up -d
-```
-
-### 5. Dosyalarını Ekle
-
-```
-data/
-├── notlarim.md
-├── kitap_ozeti.pdf
-├── fikirler.txt
-└── proje_dokumanı.docx
-```
-
-### 6. İndeksle
-
-```bash
+# Parse, chunk, and index documents into Qdrant
 python main.py ingest
+
+# Inspect extracted writing style metrics from your notes
+python main.py analyze-style
+
+# Start interactive terminal chat (with style conditioning and persistent memory)
+python main.py chat
+
+# Run background filesystem watcher for automatic re-indexing on file save
+python main.py watch
 ```
 
-### 7. Kullan!
+### 4. Streamlit Web UI
 
-**Streamlit UI (önerilen):**
 ```bash
 streamlit run ui/app.py
 ```
 
-**Terminal sohbeti:**
-```bash
-python main.py chat
-```
-
 ---
 
-## 🛠️ CLI Komutları
-
-```bash
-python main.py ingest          # Dosyaları vektörleştirir
-python main.py chat            # Terminal sohbet
-python main.py watch           # Klasörü izler (auto-index)
-python main.py clear           # Sohbet geçmişini siler
-python main.py analyze-style   # Yazım stili profilini gösterir
-```
-
----
-
-## ⚙️ Konfigürasyon
-
-`.env` dosyasını düzenle:
+## Configuration (`.env`)
 
 ```env
 DATA_DIR=data
-LLM_MODEL=llama3.2          # veya mistral, phi3, vb.
+LLM_MODEL=llama3.2
 EMBED_MODEL=nomic-embed-text
 QDRANT_URL=http://localhost:6333
 CHUNK_SIZE=512
@@ -164,52 +100,12 @@ STYLE_ENABLED=true
 
 ---
 
-## 📁 Proje Yapısı
+## Running Tests
 
-```
-personal-omniscience-engine/
-├── config.py                # Merkezi konfigürasyon
-├── main.py                  # CLI entrypoint
-├── docker-compose.yml       # Qdrant servisi
-├── requirements.txt
-├── setup.bat                # Windows kurulum
-│
-├── ingestion/
-│   ├── loader.py            # Dosya okuyucu
-│   ├── indexer.py           # Qdrant vektörleme
-│   └── watcher.py           # Otomatik izleme
-│
-├── engine/
-│   ├── query.py             # RAG sorgu motoru
-│   └── memory.py            # Konuşma hafızası
-│
-├── style/
-│   ├── analyzer.py          # Yazım tarzı analizi
-│   └── prompt_builder.py    # Dinamik sistem prompt
-│
-├── ui/
-│   └── app.py               # Streamlit arayüzü
-│
-└── data/                    # ← Kendi dosyalarını buraya koy
+```bash
+pytest -v tests/
 ```
 
----
+## License
 
-## 🔮 Yol Haritası
-
-- [x] PDF, MD, TXT, DOCX desteği
-- [x] Qdrant vektör veritabanı entegrasyonu
-- [x] Ollama yerel LLM entegrasyonu
-- [x] Konuşma hafızası
-- [x] Yazım tarzı analizi & taklidi
-- [x] Watchdog otomatik indeksleme
-- [x] Streamlit UI
-- [ ] Obsidian vault entegrasyonu
-- [ ] Grafik tabanlı bilgi haritası (Graph RAG)
-- [ ] Ses ile soru sorma
-
----
-
-## 📄 Lisans
-
-MIT © 2025
+MIT License.
