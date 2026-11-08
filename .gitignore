@@ -1,0 +1,30 @@
+# Ortam
+.env
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Veri (kişisel dosyalar git'e gitmesin)
+data/
+!data/.gitkeep
+
+# Streamlit
+.streamlit/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dağıtım
+dist/
+build/
+*.egg-info/
