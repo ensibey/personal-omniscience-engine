@@ -62,36 +62,78 @@ def build_system_prompt(
 
 def _build_style_bullets(profile: StyleProfile) -> List[str]:
     bullets: List[str] = []
+    is_en = profile.language_hint == "en"
 
     avg = profile.avg_sentence_length
     if avg < 8:
-        bullets.append("- Kısa ve öz cümleler kur; tek fikirde kal.")
+        bullets.append(
+            "- Keep sentences concise and focused on one idea."
+            if is_en
+            else "- Kısa ve öz cümleler kur; tek fikirde kal."
+        )
     elif avg < 14:
-        bullets.append("- Orta uzunlukta cümleler kullan; sade ve anlaşılır ol.")
+        bullets.append(
+            "- Use medium-length, clear, and direct sentences."
+            if is_en
+            else "- Orta uzunlukta cümleler kullan; sade ve anlaşılır ol."
+        )
     else:
-        bullets.append("- Daha geniş açıklamalar yapabilirsin; ayrıntı vermekten çekinme.")
+        bullets.append(
+            "- Detailed, structured explanations are preferred."
+            if is_en
+            else "- Daha geniş açıklamalar yapabilirsin; ayrıntı vermekten çekinme."
+        )
 
     if profile.emoji_density > 0.01:
-        bullets.append("- Uygun yerlerde ölçülü emoji kullan.")
+        bullets.append(
+            "- Use emojis sparingly where appropriate."
+            if is_en
+            else "- Uygun yerlerde ölçülü emoji kullan."
+        )
     else:
-        bullets.append("- Emoji kullanma; sade ve metin odaklı kal.")
+        bullets.append(
+            "- Do not use emojis; keep responses clean and text-focused."
+            if is_en
+            else "- Emoji kullanma; sade ve metin odaklı kal."
+        )
 
     if profile.bullet_ratio > 0.15:
-        bullets.append("- Bilgileri madde listesi (- veya 1. 2. 3.) olarak sun.")
+        bullets.append(
+            "- Present information using structured bullet or numbered lists."
+            if is_en
+            else "- Bilgileri madde listesi (- veya 1. 2. 3.) olarak sun."
+        )
     else:
-        bullets.append("- Paragraf biçiminde yaz; listeleri yalnızca gerektiğinde kullan.")
+        bullets.append(
+            "- Write in cohesive paragraphs; use lists only when necessary."
+            if is_en
+            else "- Paragraf biçiminde yaz; listeleri yalnızca gerektiğinde kullan."
+        )
 
     if profile.heading_ratio > 0.03:
-        bullets.append("- Uzun cevaplarda Markdown başlıkları (## Başlık) kullan.")
+        bullets.append(
+            "- Use Markdown headings (## Section) for longer answers."
+            if is_en
+            else "- Uzun cevaplarda Markdown başlıkları (## Başlık) kullan."
+        )
 
     if profile.uses_bold:
-        bullets.append("- **Anahtar terimleri** veya önemli kavramları kalın yap.")
+        bullets.append(
+            "- Bold **key terms** and critical concepts."
+            if is_en
+            else "- **Anahtar terimleri** veya önemli kavramları kalın yap."
+        )
 
     if profile.uses_code_blocks:
-        bullets.append("- Kod veya teknik içerik varsa ```kod bloğu``` kullan.")
+        bullets.append(
+            "- Format code and technical snippets inside fenced ```code blocks```."
+            if is_en
+            else "- Kod veya teknik içerik varsa ```kod bloğu``` kullan."
+        )
 
     if profile.sample_sentences:
         excerpts = " | ".join(profile.sample_sentences[:3])
-        bullets.append(f"- Kullanıcının yazım tonuna örnekler: {excerpts[:300]}")
+        prefix = "- Reference tone excerpts: " if is_en else "- Kullanıcının yazım tonuna örnekler: "
+        bullets.append(f"{prefix}{excerpts[:300]}")
 
     return bullets
