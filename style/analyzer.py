@@ -41,6 +41,10 @@ class StyleProfile:
     heading_ratio: float = 0.0
     uses_bold: bool = False
     uses_code_blocks: bool = False
+    lexical_diversity: float = 0.0
+    question_ratio: float = 0.0
+    exclamation_ratio: float = 0.0
+    formality_score: float = 0.5
     top_words: List[str] = field(default_factory=list)
     sample_sentences: List[str] = field(default_factory=list)
     total_words: int = 0
@@ -96,25 +100,20 @@ def _detect_language(words: List[str]) -> str:
     return "tr" if any(c in sample for c in tr_chars) else "en"
 
 
-def analyze_style(directory: Path = DATA_DIR) -> StyleProfile:
-    """Scan markdown and plain-text files in directory to compute a StyleProfile."""
+def analyze_text(full_text: str) -> StyleProfile:
+    """Compute a StyleProfile directly from an in-memory text string."""
     profile = StyleProfile()
-    directory = Path(directory)
-
-    texts = _read_text_files(directory)
-    if not texts:
-        logger.warning("no text files found in %s; returning default StyleProfile", directory)
+    if not full_text or not full_text.strip():
         return profile
 
-    full_text = "\n\n".join(texts)
     lines = full_text.splitlines()
     words = _count_words(full_text)
-
     if not words:
         return profile
 
     profile.total_words = len(words)
     profile.language_hint = _detect_language(words)
+    profile.lexical_diversity = round(len(set(words)) / max(len(words), 1), 3)
 
     sentences = _split_sentences(full_text)
     if sentences:
@@ -124,6 +123,12 @@ def analyze_style(directory: Path = DATA_DIR) -> StyleProfile:
         )
         sorted_sents = sorted(sentences, key=len)
         profile.sample_sentences = [s for s in sorted_sents if 5 < len(s) < 200][:5]
+        profile.question_ratio = round(
+            sum(1 for s in sentences if s.endswith("?")) / len(sentences), 3
+        )
+        profile.exclamation_ratio = round(
+            sum(1 for s in sentences if s.endswith("!")) / len(sentences), 3
+        )
 
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", full_text) if p.strip()]
     if paragraphs:
@@ -144,6 +149,12 @@ def analyze_style(directory: Path = DATA_DIR) -> StyleProfile:
     profile.uses_bold = bool(re.search(r"\*\*.+?\*\*", full_text))
     profile.uses_code_blocks = "```" in full_text
 
+    # Heuristic formality score in [0.0, 1.0]: longer sentences & higher lexical diversity raise formality;
+    # emojis and exclamations lower formality.
+    sent_component = min(1.0, profile.avg_sentence_length / 20.0)
+    penalty = min(0.5, profile.emoji_density * 10.0 + profile.exclamation_ratio * 0.4)
+    profile.formality_score = round(max(0.0, min(1.0, 0.55 * sent_component + 0.45 * profile.lexical_diversity - penalty)), 3)
+
     word_freq: Dict[str, int] = {}
     for w in words:
         if w not in _STOP_WORDS and len(w) > 3:
@@ -152,5 +163,17 @@ def analyze_style(directory: Path = DATA_DIR) -> StyleProfile:
         w for w, _ in sorted(word_freq.items(), key=lambda x: -x[1])
     ][:20]
 
+    return profile
+
+
+def analyze_style(directory: Path = DATA_DIR) -> StyleProfile:
+    """Scan markdown and plain-text files in directory to compute a StyleProfile."""
+    directory = Path(directory)
+    texts = _read_text_files(directory)
+    if not texts:
+        logger.warning("no text files found in %s; returning default StyleProfile", directory)
+        return StyleProfile()
+
+    profile = analyze_text("\n\n".join(texts))
     logger.info("style analysis completed: %s", profile)
     return profile

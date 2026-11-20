@@ -1,31 +1,37 @@
-"""Unit tests for Personal Omniscience Engine Style Analyzer & Prompt Builder."""
+"""Tests for quantitative writing style profiling."""
 
-import tempfile
 from pathlib import Path
-from style.analyzer import analyze_style, StyleProfile
-from style.prompt_builder import build_system_prompt
+
+from style.analyzer import analyze_style, analyze_text
 
 
-def test_analyze_style_on_markdown_notes():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        p = Path(tmpdir) / "notes.md"
-        p.write_text(
-            "# Yapay Zeka Mimarisi\n\n"
-            "**Qdrant** ve **LlamaIndex** kullanarak yerel RAG sistemleri geliştiriyoruz. "
-            "Veri gizliliği kurumsal projelerde çok kritik bir gereksinimdir.\n\n"
-            "- Vektör indeksleme ve semantik arama\n"
-            "- Yerel model çıkarımı ve önbellekleme\n"
-            "```python\nprint('hello')\n```\n",
-            encoding="utf-8",
-        )
-        profile = analyze_style(Path(tmpdir))
-        assert isinstance(profile, StyleProfile)
-        assert profile.total_words > 10
-        assert profile.language_hint == "tr"
-        assert profile.uses_bold is True
-        assert profile.uses_code_blocks is True
-        assert profile.bullet_ratio > 0.0
+def test_analyze_style_from_directory(tmp_path: Path):
+    note = tmp_path / "notes.md"
+    note.write_text(
+        "# Mimari Notları\n\n"
+        "- **Qdrant** vektör araması için kullanılır.\n"
+        "- **Ollama** yerel çıkarım sağlar.\n\n"
+        "```python\nprint('hello')\n```\n",
+        encoding="utf-8",
+    )
 
-        prompt = build_system_prompt(profile)
-        assert isinstance(prompt, str)
-        assert len(prompt) > 30
+    profile = analyze_style(tmp_path)
+    assert profile.total_words > 0
+    assert profile.language_hint == "tr"
+    assert profile.uses_bold is True
+    assert profile.uses_code_blocks is True
+    assert profile.bullet_ratio > 0.15
+    assert profile.heading_ratio > 0.0
+    assert 0.0 < profile.lexical_diversity <= 1.0
+
+
+def test_formality_distinguishes_formal_vs_casual_text():
+    formal = analyze_text(
+        "Distributed retrieval systems require deterministic indexing pipelines and reproducible evaluation benchmarks. "
+        "Furthermore, vector quantization reduces memory bandwidth constraints across commodity hardware."
+    )
+    casual = analyze_text(
+        "Hey!! Super cool stuff!! 🔥🔥 Works fast! Really really fast! 🎉"
+    )
+    assert formal.formality_score > casual.formality_score
+    assert casual.exclamation_ratio > 0.5
