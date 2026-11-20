@@ -1,111 +1,85 @@
-# personal-omniscience-engine
+# Personal Omniscience Engine
 
-[![CI](https://github.com/ensibey/personal-omniscience-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/ensibey/personal-omniscience-engine/actions)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Omniscience Engine CI](https://github.com/ensibey/personal-omniscience-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/ensibey/personal-omniscience-engine/actions/workflows/ci.yml)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![License: MIT](https://img.shields.io/badge/license-MIT-10B981)
+![Tests: 13 passing](https://img.shields.io/badge/tests-13%20passing-10B981)
 
-Local knowledge base indexer and conversational retrieval engine built on **LlamaIndex**, **Qdrant**, and **Ollama** (`llama3.2`, `nomic-embed-text`). Indexes personal Markdown notes, PDFs, DOCX, and TXT files continuously via a filesystem watcher (`watchdog`) and adapts LLM output formatting to match the author's own writing profile.
+A local, privacy-first **personal knowledge engine** that indexes Markdown/Obsidian vaults and PDFs with **incremental SHA-256 sync**, builds a bidirectional **`[[wikilink]]` knowledge graph** for graph-boosted retrieval, and conditions local LLM responses on a quantitative **stylometric profile** of your own writing.
 
 ---
 
 ## Architecture
 
 ```text
-data/ (.md, .pdf, .docx, .txt)
-  │
-  ├──► ingestion/watcher.py  (Watchdog filesystem events -> incremental re-index)
-  ├──► ingestion/indexer.py  (SentenceSplitter 512/64 -> nomic-embed-text -> Qdrant)
-  └──► style/analyzer.py     (Extracts sentence length, bullet/heading ratios, vocabulary)
-                                     │
-                                     ▼
-                         style/prompt_builder.py
-                                     │
-                                     ▼
-User Query ──► CondensePlusContextChatEngine (LlamaIndex + Qdrant Top-K + Ollama)
+Local Vault (Markdown / Obsidian / PDF)
+   │
+   ├──► Incremental Sync (`ingestion/sync_state.py`, SHA-256 diffing) + Watchdog
+   ├──► Markdown Parser (`ingestion/markdown_parser.py`) — YAML frontmatter, [[wikilinks]], #tags
+   │        │
+   │        ├──► Bidirectional KnowledgeGraph (`engine/knowledge_graph.py`) — Backlinks, BFS hops, Centrality
+   │        └──► Graph-Boosted Retriever (`engine/local_retriever.py`) / Qdrant + LlamaIndex
+   │
+   └──► Stylometric Profiler (`style/analyzer.py`) — Sentence length, TTR, Formality, Punctuation
+            │
+            ├──► Bilingual Prompt Conditioner (`style/prompt_builder.py`, EN / TR)
+            └──► Style Drift Evaluator (`style/drift.py`) — Measures response alignment vs target profile
 ```
-
-### Author Style Profiling (`style/analyzer.py`)
-Generic RAG system prompts produce stiff, uniform responses that feel disconnected from personal engineering notes. `analyze_style()` scans the raw `.md` and `.txt` files in `data/` to compute:
-- Mean sentence length (words/sentence) and paragraph length (sentences/paragraph)
-- Structural ratios: bullet list density (`bullet_ratio`), Markdown heading density (`heading_ratio`), bold emphasis, and fenced code blocks
-- Language detection (`tr` / `en`) and top content vocabulary (`top_words`)
-
-`build_system_prompt()` translates this `StyleProfile` into explicit formatting constraints injected into `CondensePlusContextChatEngine`.
 
 ---
 
-## Setup & Usage
+## Reproducible Vault & Stylometry Benchmark
 
-### 1. Prerequisites
-- Python 3.10+
-- [Ollama](https://ollama.com) with `llama3.2` and `nomic-embed-text`:
-  ```bash
-  ollama pull llama3.2
-  ollama pull nomic-embed-text
-  ```
-- [Qdrant](https://qdrant.tech) (via Docker Compose):
-  ```bash
-  docker-compose up -d
-  ```
-
-### 2. Installation
+Measured on a 10-note Obsidian-style linked vault (`benchmarks/run_benchmark.py`):
 
 ```bash
-git clone https://github.com/ensibey/personal-omniscience-engine.git
-cd personal-omniscience-engine
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python benchmarks/run_benchmark.py
+```
+
+| Evaluation | Metric | Result |
+| :--- | :--- | :---: |
+| **Plain BM25 (No Graph)** | Recall@3 / MRR (linked notes) | `33.3%` / `0.333` (`0.013 ms`) |
+| **Wikilink Graph-Boosted BM25** | Recall@3 / MRR (linked notes) | **`100.0%`** / **`0.639`** (`0.016 ms`) |
+| **Style Drift Evaluator** | In-style alignment vs Drifted reply | **`0.929`** vs **`0.230`** (margin `+0.699`) |
+
+---
+
+## Quick Start
+
+### 1. Offline CLI (No Qdrant or Ollama Required)
+
+```bash
+# Profile your writing style across a Markdown vault
+python cli.py profile path/to/vault
+
+# Search with BM25 + wikilink graph boost
+python cli.py search path/to/vault "vector database HNSW"
+
+# Inspect note degree centrality across [[wikilinks]]
+python cli.py graph path/to/vault
+
+# Check style drift of a generated response against your vault
+python cli.py drift path/to/vault "Your candidate response text..."
+```
+
+### 2. Full Local Qdrant + Ollama + Streamlit Stack
+
+```bash
+docker compose up -d
 pip install -r requirements.txt
-cp .env.example .env
+ollama pull llama3
+ollama pull nomic-embed-text
+python main.py
 ```
 
-### 3. CLI Commands
-
-Place your `.md`, `.pdf`, `.txt`, or `.docx` files inside `data/` and run:
-
-```bash
-# Parse, chunk, and index documents into Qdrant
-python main.py ingest
-
-# Inspect extracted writing style metrics from your notes
-python main.py analyze-style
-
-# Start interactive terminal chat (with style conditioning and persistent memory)
-python main.py chat
-
-# Run background filesystem watcher for automatic re-indexing on file save
-python main.py watch
-```
-
-### 4. Streamlit Web UI
-
-```bash
-streamlit run ui/app.py
-```
-
----
-
-## Configuration (`.env`)
-
-```env
-DATA_DIR=data
-LLM_MODEL=llama3.2
-EMBED_MODEL=nomic-embed-text
-QDRANT_URL=http://localhost:6333
-CHUNK_SIZE=512
-CHUNK_OVERLAP=64
-TOP_K=5
-STYLE_ENABLED=true
-```
-
----
-
-## Running Tests
+### 3. Run Tests
 
 ```bash
 pytest -v tests/
 ```
 
+---
+
 ## License
 
-MIT License.
+MIT
