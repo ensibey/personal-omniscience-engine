@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "personal-omniscience-engine"
+version = "0.2.0"
+description = "Local Markdown/PDF knowledge indexer, Obsidian wikilink graph, and author writing-style conditioned RAG engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Enis Doğan", email = "enis-dogan@outlook.com"}
+]
+keywords = ["rag", "stylometry", "knowledge-graph", "obsidian", "qdrant", "llamaindex", "ollama"]
+
+[project.urls]
+Homepage = "https://github.com/ensibey/personal-omniscience-engine"
+Repository = "https://github.com/ensibey/personal-omniscience-engine"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
