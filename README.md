@@ -11,19 +11,17 @@ A local, privacy-first **personal knowledge engine** that indexes Markdown/Obsid
 
 ## Architecture
 
-```text
-Local Vault (Markdown / Obsidian / PDF)
-   │
-   ├──► Incremental Sync (`ingestion/sync_state.py`, SHA-256 diffing) + Watchdog
-   ├──► Markdown Parser (`ingestion/markdown_parser.py`) — YAML frontmatter, [[wikilinks]], #tags
-   │        │
-   │        ├──► Bidirectional KnowledgeGraph (`engine/knowledge_graph.py`) — Backlinks, BFS hops, Centrality
-   │        └──► Graph-Boosted Retriever (`engine/local_retriever.py`) / Qdrant + LlamaIndex
-   │
-   └──► Stylometric Profiler (`style/analyzer.py`) — Sentence length, TTR, Formality, Punctuation
-            │
-            ├──► Bilingual Prompt Conditioner (`style/prompt_builder.py`, EN / TR)
-            └──► Style Drift Evaluator (`style/drift.py`) — Measures response alignment vs target profile
+```mermaid
+flowchart LR
+    V["Local Vault<br/>(Markdown / Obsidian / PDF)"] --> S["SHA-256 Incremental Sync<br/>+ Watchdog Watcher"]
+    S --> P["Markdown Parser<br/>(YAML, [[wikilinks]], #tags)"]
+    P --> G["Bidirectional KnowledgeGraph<br/>(Backlinks, BFS Hops, Centrality)"]
+    G --> R["Graph-Boosted BM25 / Qdrant<br/>Retriever"]
+    V --> ST["Stylometric Profiler<br/>(TTR, Cadence, Formality)"]
+    ST --> PB["Bilingual Prompt Conditioner<br/>(EN / TR)"]
+    R --> LLM["Local Ollama LLM"]
+    PB --> LLM
+    LLM --> DR["Style Drift Evaluator<br/>(Alignment Score & Warnings)"]
 ```
 
 ---
@@ -49,27 +47,17 @@ python benchmarks/run_benchmark.py
 ### 1. Offline CLI (No Qdrant or Ollama Required)
 
 ```bash
-# Profile your writing style across a Markdown vault
 python cli.py profile path/to/vault
-
-# Search with BM25 + wikilink graph boost
 python cli.py search path/to/vault "vector database HNSW"
-
-# Inspect note degree centrality across [[wikilinks]]
 python cli.py graph path/to/vault
-
-# Check style drift of a generated response against your vault
 python cli.py drift path/to/vault "Your candidate response text..."
 ```
 
-### 2. Full Local Qdrant + Ollama + Streamlit Stack
+### 2. One-Command Docker Stack
 
 ```bash
 docker compose up -d
-pip install -r requirements.txt
-ollama pull llama3
-ollama pull nomic-embed-text
-python main.py
+docker build -t omniscience-engine .
 ```
 
 ### 3. Run Tests
